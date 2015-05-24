@@ -1,0 +1,171 @@
+---
+title: "Practical Machine Learning"
+author: "Ahmed Alhanaei"
+date: "May 24, 2015"
+output: html_document
+---
+ 
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=10, fig.height=10,echo=TRUE, warning=FALSE, message=FALSE)
+````
+
+
+```{r init,echo=FALSE}
+library("lattice")
+library("ggplot2")
+library("caret")
+library ("stringr")
+library("randomForest")
+library("rpart")
+library("tree")
+library("rattle")
+library("party")
+library("knitr")
+```
+
+
+
+#Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+My goal for this project is to predict the manner in which they did the exercise. Utilizing different kinds of machine learning.
+
+#Data 
+
+
+The training data for this project are available here: 
+
+* Dataset: [Training](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) 
+
+
+The test data are available here: 
+
+* Dataset: [Testing](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+
+
+
+#Loading Data
+The data is load
+
+```{r loading}
+rpmlData<- read.csv("pml-training.csv",na.strings=c("","NA","#DIV/0!"))
+rpmlTesting<- read.csv("pml-testing.csv",na.strings=c("","NA","#DIV/0!"))
+```
+
+
+dimentions of the data is `r dim(rpmlData)`
+
+#data Profiling
+
+removing New Window rows with Data that contain #DIV/0!
+```{r cleaning1}
+newWin<-rpmlData$new_window=="yes"
+pmlData<- rpmlData[!newWin,]
+pmlTesting<-rpmlTesting
+```
+
+removing variable with more than 50% NA
+```{r cleaning2}
+n<-length(pmlData[,1])
+col<-sapply(pmlData,function(x) (sum( is.na(x))<(0.5*n) ))
+
+pmlData<-pmlData[,col]
+pmlTesting<-pmlTesting[,col]
+```
+removing first 7 columns that contain information that are not relevent in the for learning
+```{r cleanin3}
+pmlData<-pmlData[,-c(1:7)]
+```
+removing near zero and zero variance variables
+```{r cleaning4,cache=TRUE}
+nsv<- nearZeroVar(pmlData,saveMetrics = TRUE)
+pmlData<- pmlData[,!nsv$nzv]
+```
+
+Dimension of the data after removing un-needed data is `r dim(pmlData)`
+
+#explatory analysis
+Due to the size of the data i am selecting some variable to display the relation between the result.
+```{r explor, cache=TRUE}
+oc<-which(colnames(pmlData)=="classe")
+cols<-c("gyros_belt_z","magnet_arm_x","magnet_dumbbell_z","magnet_forearm_x","accel_forearm_x","gyros_belt_z","gyros_belt_z")
+
+featurePlot(pmlData[,cols],pmlData$classe,plot="pairs")
+```
+
+#selecting the training and testing sets
+
+I am using seed 1000 to make it easy to repreduce the results. Also the data is divided int two groups training 80% of the data and testing selecting 20% of the data. also selected 25% of the training set (20 persent of total set) as a small training set for testing perpose.
+
+```{r subsetting}
+set.seed(1000)
+inTrain <- createDataPartition(y= pmlData$classe ,p=0.8, list=FALSE)
+training<- pmlData[inTrain,]
+testing<- pmlData[-inTrain,]
+
+sInTrain <- createDataPartition(y= training$classe ,p=0.25, list=FALSE)
+straining<- training[sInTrain,]
+```
+The size of training set is `r dim(training)[1]`
+The size of small training set is `r dim(straining)[1]`
+The size of testing set is `r dim(testing)[1]`
+
+
+
+#modeling
+
+For this data the best result found using random forests. I have tryed may modeling some end up with poor results. also tryed boosting random forest with  gbm. 
+
+```{r modeling, cache=TRUE}
+set.seed(1000)
+rfmodel<-randomForest(classe~., data=training,mtry=7,ntree=500)
+predictions <- predict(rfmodel,newdata=testing)
+rfConMat<-confusionMatrix(predictions,testing$classe)
+rfpred<-predict(rfmodel,pmlTesting)
+
+rpmodel<-rpart(classe~., data=training,method = "class")
+predictions <- predict(rpmodel,newdata=testing,type="class")
+rpConMat<-confusionMatrix(predictions,testing$classe)
+rppred<-predict(rpmodel,pmlTesting,type="class")
+```
+
+#cross validating 
+**Random Forest Learning**
+
+Using the Confusion matrix to do the cross validation we get the following results for **Random Forest** learning
+```{r kablef, results = 'asis'} 
+kable(rfConMat$table)
+```
+
+The accurecy of this model is **`r rfConMat$overall[1]`** with confidence intervel for the accurecy **(`r rfConMat$overall[3]`,`r rfConMat$overall[4]`)**
+
+with Random forest the result if very accurate and this showes in the cross validation matrix and the accurecy.
+
+
+**Classification Tree Learning**
+
+Using the Confusion matrix to do the cross validation we get the following results for **Classification tree** using Recursive Partitioning and Regression Trees (rpart) learning.
+```{r kabler, results = 'asis'} 
+kable(rpConMat$table)
+```
+
+The accurecy of this model is **`r rpConMat$overall[1]`** with confidence intervel for the accurecy **(`r rpConMat$overall[3]`,`r rpConMat$overall[4]`)** 
+
+
+
+
+#predections
+
+for the submission I am using the result from the Random Forest.
+
+```{r pred} 
+rfpred
+```
+
+
+
+
+
+
